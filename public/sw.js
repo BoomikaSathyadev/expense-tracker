@@ -1,10 +1,9 @@
-const CACHE = 'expense-tracker-v2';
-const STATIC = ['/dashboard', '/manifest.json', '/icon-192.png', '/icon-512.png'];
+const CACHE = 'expense-tracker-v3';
 
 self.addEventListener('install', e => {
   e.waitUntil(
     caches.open(CACHE)
-      .then(c => c.addAll(STATIC))
+      .then(c => c.addAll(['/manifest.json', '/icon-192.png', '/icon-512.png']))
       .then(() => self.skipWaiting())
   );
 });
@@ -19,8 +18,5 @@ self.addEventListener('activate', e => {
 
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
-  e.respondWith(
-    fetch(e.request)
-      .catch(() => caches.match(e.request))
-  );
+  e.respondWith(fetch(e.request).catch(() => caches.match(e.request)));
 });
