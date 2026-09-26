@@ -1,14 +1,32 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // PWA headers
   async headers() {
     return [
       {
         source: "/(.*)",
         headers: [
           { key: "X-Content-Type-Options", value: "nosniff" },
-          { key: "X-Frame-Options", value: "DENY" },
+        ],
+      },
+      {
+        source: "/sw.js",
+        headers: [
+          { key: "Content-Type", value: "application/javascript; charset=utf-8" },
+          { key: "Cache-Control", value: "no-cache, no-store, must-revalidate" },
+          { key: "Service-Worker-Allowed", value: "/" },
+        ],
+      },
+      {
+        source: "/manifest.json",
+        headers: [
+          { key: "Content-Type", value: "application/manifest+json" },
+        ],
+      },
+      {
+        source: "/:icon(icon-192|icon-512).png",
+        headers: [
+          { key: "Content-Type", value: "image/png" },
         ],
       },
     ];
