@@ -23,12 +23,6 @@ const nextConfig: NextConfig = {
           { key: "Content-Type", value: "application/manifest+json" },
         ],
       },
-      {
-        source: "/:icon(icon-192|icon-512).png",
-        headers: [
-          { key: "Content-Type", value: "image/png" },
-        ],
-      },
     ];
   },
 };
