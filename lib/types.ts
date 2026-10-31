@@ -39,6 +39,16 @@ export interface MonthlyIncome {
   created_at: string;
 }
 
+export interface IncomeRecord {
+  id: string;
+  user_id: string;
+  source: string;
+  amount: number;
+  date: string;
+  note: string | null;
+  created_at: string;
+}
+
 export interface MonthSummary {
   year: number;
   month: number;

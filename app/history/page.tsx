@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase";
 import BottomNav from "@/components/BottomNav";
-import { Expense, CATEGORIES, Category } from "@/lib/types";
+import { Expense, IncomeRecord, CATEGORIES, Category } from "@/lib/types";
 import {
   formatCurrency,
   formatDate,
@@ -16,6 +16,7 @@ export default function HistoryPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [incomeRecords, setIncomeRecords] = useState<IncomeRecord[]>([]);
   const [selectedYear, setSelectedYear] = useState(0);
   const [selectedMonth, setSelectedMonth] = useState(0);
   const [availableMonths, setAvailableMonths] = useState<
@@ -45,15 +46,21 @@ export default function HistoryPage() {
       }
 
       const lastDay = new Date(year, month, 0).getDate();
-      const { data } = await supabase
+      const [{ data }, { data: incomeData }] = await Promise.all([supabase
         .from("expenses")
         .select("*")
         .eq("user_id", user.id)
         .gte("date", `${year}-${String(month).padStart(2, "0")}-01`)
         .lte("date", `${year}-${String(month).padStart(2, "0")}-${lastDay}`)
-        .order("date", { ascending: false });
+        .order("date", { ascending: false }),
+        supabase.from("income_records").select("*").eq("user_id", user.id)
+          .gte("date", `${year}-${String(month).padStart(2, "0")}-01`)
+          .lte("date", `${year}-${String(month).padStart(2, "0")}-${lastDay}`)
+          .order("date", { ascending: false }),
+      ]);
 
       setExpenses(data || []);
+      setIncomeRecords(incomeData || []);
       setLoading(false);
     },
     [router]
@@ -67,16 +74,18 @@ export default function HistoryPage() {
       } = await supabase.auth.getUser();
       if (!user) return;
 
-      const { data } = await supabase
-        .from("expenses")
-        .select("date")
-        .eq("user_id", user.id);
+      const [{ data }, { data: incomeData }] = await Promise.all([
+        supabase.from("expenses").select("date").eq("user_id", user.id),
+        supabase.from("income_records").select("date").eq("user_id", user.id),
+      ]);
 
       const monthSet = new Set<string>();
       monthSet.add(`${currentYear}-${currentMonth}`);
       (data || []).forEach((r: { date: string }) => {
-        const d = new Date(r.date);
-        monthSet.add(`${d.getFullYear()}-${d.getMonth() + 1}`);
+        monthSet.add(`${Number(r.date.slice(0, 4))}-${Number(r.date.slice(5, 7))}`);
+      });
+      (incomeData || []).forEach((r: { date: string }) => {
+        monthSet.add(`${Number(r.date.slice(0, 4))}-${Number(r.date.slice(5, 7))}`);
       });
 
       const months = Array.from(monthSet)
@@ -196,6 +205,26 @@ export default function HistoryPage() {
       </div>
 
       <div className="px-4 space-y-2">
+        <div className="bg-white border border-gray-200 rounded-xl p-4">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs text-gray-500 uppercase tracking-wide">Income</p>
+            <p className="text-sm font-semibold text-gray-900">
+              {formatCurrency(incomeRecords.reduce((sum, record) => sum + Number(record.amount), 0))}
+            </p>
+          </div>
+          {incomeRecords.length === 0 ? (
+            <p className="text-sm text-gray-400">No income for {formatMonthYear(selectedYear, selectedMonth)}.</p>
+          ) : incomeRecords.map((record) => (
+            <div key={record.id} className="flex items-start justify-between gap-3 py-2 border-t border-gray-100">
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-gray-900 truncate">{record.source}</p>
+                <p className="text-xs text-gray-400">{formatDate(record.date)}{record.note ? ` · ${record.note}` : ""}</p>
+              </div>
+              <span className="text-sm font-semibold text-gray-900 shrink-0">{formatCurrency(record.amount)}</span>
+            </div>
+          ))}
+        </div>
+
         {expenses.length === 0 && (
           <p className="text-center text-gray-400 text-sm py-8">
             No expenses for {formatMonthYear(selectedYear, selectedMonth)}.

@@ -47,6 +47,7 @@ export default function SettingsPage() {
 
     await Promise.all([
       supabase.from("expenses").delete().eq("user_id", user.id),
+      supabase.from("income_records").delete().eq("user_id", user.id),
       supabase.from("monthly_income").delete().eq("user_id", user.id),
     ]);
 

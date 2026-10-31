@@ -21,7 +21,17 @@ NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 ```
 
-### 3. Install & Run
+### 3. Upgrade an existing project to multiple income records
+
+Before deploying a version that uses multiple income records, run
+`supabase/migrations/202610310001_income_records.sql` in the Supabase SQL Editor.
+The migration creates the dated `income_records` table, enables user-scoped RLS,
+and copies each prior monthly income amount to a record dated on the first of
+that month. It keeps `monthly_income` and its original rows intact. The migration
+is safe to rerun for the legacy copy because each migrated row is linked to its
+original `monthly_income` row.
+
+### 4. Install & Run
 
 ```bash
 npm install

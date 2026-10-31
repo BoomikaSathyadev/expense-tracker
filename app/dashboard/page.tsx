@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase";
 import BottomNav from "@/components/BottomNav";
-import { Expense, MonthlyIncome } from "@/lib/types";
+import { Expense, IncomeRecord } from "@/lib/types";
 import {
   formatCurrency,
   formatMonthYear,
@@ -102,15 +102,21 @@ function CategoryBreakdown({
   );
 }
 
+function todayAsInputDate() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+}
+
 export default function DashboardPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [selectedYear, setSelectedYear] = useState(0);
   const [selectedMonth, setSelectedMonth] = useState(0);
-  const [income, setIncome] = useState<MonthlyIncome | null>(null);
+  const [incomeRecords, setIncomeRecords] = useState<IncomeRecord[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [editingIncome, setEditingIncome] = useState(false);
-  const [incomeInput, setIncomeInput] = useState("");
+  const [incomeFormOpen, setIncomeFormOpen] = useState(false);
+  const [editingIncomeId, setEditingIncomeId] = useState<string | null>(null);
+  const [incomeForm, setIncomeForm] = useState({ source: "", amount: "", date: todayAsInputDate(), note: "" });
   const [incomeError, setIncomeError] = useState("");
   const [savingIncome, setSavingIncome] = useState(false);
   const [cumulativeSavings, setCumulativeSavings] = useState(0);
@@ -132,12 +138,13 @@ export default function DashboardPage() {
       const [incomeRes, expensesRes, allIncomeRes, allExpensesRes] =
         await Promise.all([
           supabase
-            .from("monthly_income")
+            .from("income_records")
             .select("*")
             .eq("user_id", user.id)
-            .eq("year", year)
-            .eq("month", month)
-            .maybeSingle(),
+            .gte("date", `${year}-${String(month).padStart(2, "0")}-01`)
+            .lte("date", `${year}-${String(month).padStart(2, "0")}-${new Date(year, month, 0).getDate()}`)
+            .order("date", { ascending: false })
+            .order("created_at", { ascending: false }),
           supabase
             .from("expenses")
             .select("*")
@@ -149,25 +156,25 @@ export default function DashboardPage() {
             )
             .order("date", { ascending: false }),
           supabase
-            .from("monthly_income")
-            .select("year, month, amount")
+            .from("income_records")
+            .select("date, amount")
             .eq("user_id", user.id)
-            .order("year", { ascending: true })
-            .order("month", { ascending: true }),
+            .order("date", { ascending: true }),
           supabase
             .from("expenses")
             .select("date, amount")
             .eq("user_id", user.id),
         ]);
 
-      setIncome(incomeRes.data);
+      setIncomeRecords(incomeRes.data || []);
       setExpenses(expensesRes.data || []);
 
       // Build available months from income + expenses
       const monthSet = new Set<string>();
-      (allIncomeRes.data || []).forEach((r: { year: number; month: number }) =>
-        monthSet.add(`${r.year}-${r.month}`)
-      );
+      (allIncomeRes.data || []).forEach((r: { date: string }) => {
+        const [y, m] = r.date.split("-").map(Number);
+        monthSet.add(`${y}-${m}`);
+      });
       (allExpensesRes.data || []).forEach((r: { date: string }) => {
         const d = new Date(r.date);
         monthSet.add(`${d.getFullYear()}-${d.getMonth() + 1}`);
@@ -188,16 +195,16 @@ export default function DashboardPage() {
       let cumulative = 0;
       for (const m of months) {
         if (m.year > year || (m.year === year && m.month > month)) break;
-        const inc =
-          (allIncomeRes.data || []).find(
-            (r: { year: number; month: number; amount: number }) =>
-              r.year === m.year && r.month === m.month
-          )?.amount || 0;
+        const inc = (allIncomeRes.data || [])
+          .filter((r: { date: string; amount: number }) => {
+            const [y, mo] = r.date.split("-").map(Number);
+            return y === m.year && mo === m.month;
+          })
+          .reduce((sum: number, r: { amount: number }) => sum + Number(r.amount), 0);
         const exp = (allExpensesRes.data || [])
           .filter((r: { date: string; amount: number }) => {
-            const d = new Date(r.date);
             return (
-              d.getFullYear() === m.year && d.getMonth() + 1 === m.month
+              Number(r.date.slice(0, 4)) === m.year && Number(r.date.slice(5, 7)) === m.month
             );
           })
           .reduce(
@@ -228,10 +235,32 @@ export default function DashboardPage() {
     fetchData(y, m);
   }
 
+  function openAddIncome() {
+    setEditingIncomeId(null);
+    setIncomeForm({ source: "", amount: "", date: todayAsInputDate(), note: "" });
+    setIncomeError("");
+    setIncomeFormOpen(true);
+  }
+
+  function openEditIncome(record: IncomeRecord) {
+    setEditingIncomeId(record.id);
+    setIncomeForm({ source: record.source, amount: String(record.amount), date: record.date, note: record.note || "" });
+    setIncomeError("");
+    setIncomeFormOpen(true);
+  }
+
   async function saveIncome() {
-    const val = parseFloat(incomeInput);
-    if (isNaN(val) || val < 0) {
-      setIncomeError("Enter a valid amount");
+    const val = Number(incomeForm.amount);
+    if (!incomeForm.source.trim()) {
+      setIncomeError("Enter an income source");
+      return;
+    }
+    if (!Number.isFinite(val) || val <= 0) {
+      setIncomeError("Enter a valid positive amount");
+      return;
+    }
+    if (!incomeForm.date) {
+      setIncomeError("Choose the date received");
       return;
     }
     setSavingIncome(true);
@@ -240,28 +269,38 @@ export default function DashboardPage() {
     const {
       data: { user },
     } = await supabase.auth.getUser();
-    if (!user) return;
-
-    if (income) {
-      await supabase
-        .from("monthly_income")
-        .update({ amount: val })
-        .eq("id", income.id);
-    } else {
-      await supabase.from("monthly_income").insert({
-        user_id: user.id,
-        year: selectedYear,
-        month: selectedMonth,
-        amount: val,
-      });
+    if (!user) {
+      setSavingIncome(false);
+      return;
     }
-    setEditingIncome(false);
+
+    const values = { source: incomeForm.source.trim(), amount: val, date: incomeForm.date, note: incomeForm.note.trim() || null };
+    const { error } = editingIncomeId
+      ? await supabase.from("income_records").update(values).eq("id", editingIncomeId).eq("user_id", user.id)
+      : await supabase.from("income_records").insert({ ...values, user_id: user.id });
+    if (error) {
+      setIncomeError(error.message);
+      setSavingIncome(false);
+      return;
+    }
+    setIncomeFormOpen(false);
     setSavingIncome(false);
     fetchData(selectedYear, selectedMonth);
   }
 
+  async function deleteIncome(record: IncomeRecord) {
+    if (!confirm(`Delete ${record.source} income of ${formatCurrency(record.amount)}?`)) return;
+    const supabase = createClient();
+    const { error } = await supabase.from("income_records").delete().eq("id", record.id);
+    if (error) {
+      setIncomeError(error.message);
+      return;
+    }
+    fetchData(selectedYear, selectedMonth);
+  }
+
   const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0);
-  const incomeAmount = income?.amount || 0;
+  const incomeAmount = incomeRecords.reduce((sum, record) => sum + Number(record.amount), 0);
   const savings = incomeAmount - totalExpenses;
 
   const categoryBreakdown: Record<string, number> = {};
@@ -310,66 +349,46 @@ export default function DashboardPage() {
       <div className="px-4 space-y-3">
         {/* Income */}
         <div className="bg-white border border-gray-200 rounded-xl p-4">
-          <div className="flex items-center justify-between">
+          <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="text-xs text-gray-500 uppercase tracking-wide">
-                Income
-              </p>
-              {editingIncome ? (
-                <div className="mt-1 flex items-center gap-2">
-                  <span className="text-gray-500">₹</span>
-                  <input
-                    type="number"
-                    value={incomeInput}
-                    onChange={(e) => setIncomeInput(e.target.value)}
-                    className="w-32 border-b border-gray-400 text-lg font-semibold focus:outline-none"
-                    autoFocus
-                    min="0"
-                  />
+              <p className="text-xs text-gray-500 uppercase tracking-wide">Total Income</p>
+              <p className="text-2xl font-semibold text-gray-900 mt-1">{incomeAmount > 0 ? formatCurrency(incomeAmount) : "—"}</p>
+            </div>
+            <button onClick={openAddIncome} className="text-sm text-gray-900 font-medium border border-gray-300 rounded-lg px-3 py-1.5">Add Income</button>
+          </div>
+          {incomeError && !incomeFormOpen && <p className="text-red-500 text-xs mt-2">{incomeError}</p>}
+          <div className="mt-3 divide-y divide-gray-100">
+            {incomeRecords.map((record) => (
+              <div key={record.id} className="py-2.5 flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-gray-800 truncate">{record.source}</p>
+                  <p className="text-xs text-gray-400">{formatDate(record.date)}{record.note ? ` · ${record.note}` : ""}</p>
                 </div>
-              ) : (
-                <p className="text-2xl font-semibold text-gray-900 mt-1">
-                  {incomeAmount > 0 ? formatCurrency(incomeAmount) : "—"}
-                </p>
-              )}
-              {incomeError && (
-                <p className="text-red-500 text-xs mt-1">{incomeError}</p>
-              )}
-            </div>
-            <div className="flex gap-2">
-              {editingIncome ? (
-                <>
-                  <button
-                    onClick={saveIncome}
-                    disabled={savingIncome}
-                    className="text-sm text-gray-900 font-medium border border-gray-300 rounded-lg px-3 py-1.5"
-                  >
-                    Save
-                  </button>
-                  <button
-                    onClick={() => {
-                      setEditingIncome(false);
-                      setIncomeError("");
-                    }}
-                    className="text-sm text-gray-500 border border-gray-200 rounded-lg px-3 py-1.5"
-                  >
-                    Cancel
-                  </button>
-                </>
-              ) : (
-                <button
-                  onClick={() => {
-                    setEditingIncome(true);
-                    setIncomeInput(incomeAmount > 0 ? String(incomeAmount) : "");
-                  }}
-                  className="text-sm text-gray-500 border border-gray-200 rounded-lg px-3 py-1.5"
-                >
-                  {incomeAmount > 0 ? "Edit" : "Set"}
-                </button>
-              )}
-            </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="text-sm font-medium text-gray-900">{formatCurrency(record.amount)}</span>
+                  <button onClick={() => openEditIncome(record)} className="text-xs text-gray-500 underline">Edit</button>
+                  <button onClick={() => deleteIncome(record)} className="text-xs text-gray-400 hover:text-red-500">Delete</button>
+                </div>
+              </div>
+            ))}
+            {incomeRecords.length === 0 && <p className="text-sm text-gray-400 py-2">No income records this month.</p>}
           </div>
         </div>
+
+        {incomeFormOpen && (
+          <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
+            <p className="text-sm font-medium text-gray-900">{editingIncomeId ? "Edit Income" : "Add Income"}</p>
+            <input type="text" required value={incomeForm.source} onChange={(e) => setIncomeForm({ ...incomeForm, source: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Income source / name" />
+            <input type="number" required min="0.01" step="0.01" value={incomeForm.amount} onChange={(e) => setIncomeForm({ ...incomeForm, amount: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Amount" />
+            <input type="date" required value={incomeForm.date} onChange={(e) => setIncomeForm({ ...incomeForm, date: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+            <textarea value={incomeForm.note} onChange={(e) => setIncomeForm({ ...incomeForm, note: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Notes (optional)" rows={2} />
+            {incomeError && <p className="text-red-500 text-xs">{incomeError}</p>}
+            <div className="flex gap-2">
+              <button onClick={saveIncome} disabled={savingIncome} className="flex-1 bg-gray-900 text-white py-2 rounded-lg text-sm font-medium disabled:opacity-50">{savingIncome ? "Saving…" : "Save Income"}</button>
+              <button onClick={() => { setIncomeFormOpen(false); setIncomeError(""); }} className="flex-1 border border-gray-200 text-gray-600 py-2 rounded-lg text-sm">Cancel</button>
+            </div>
+          </div>
+        )}
 
         {/* Expenses + Savings row */}
         <div className="grid grid-cols-2 gap-3">
