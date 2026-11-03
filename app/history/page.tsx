@@ -217,10 +217,10 @@ export default function HistoryPage() {
           ) : incomeRecords.map((record) => (
             <div key={record.id} className="flex items-start justify-between gap-3 py-2 border-t border-gray-100">
               <div className="min-w-0">
-                <p className="text-sm font-medium text-gray-900 truncate">{record.source}</p>
-                <p className="text-xs text-gray-400">{formatDate(record.date)}{record.note ? ` · ${record.note}` : ""}</p>
+                <p className="text-sm font-normal text-gray-900 truncate">{record.source}</p>
+                <p className="text-xs font-normal text-gray-400">{formatDate(record.date)}{record.note ? ` · ${record.note}` : ""}</p>
               </div>
-              <span className="text-sm font-semibold text-gray-900 shrink-0">{formatCurrency(record.amount)}</span>
+              <span className="text-sm font-normal text-gray-900 shrink-0">{formatCurrency(record.amount)}</span>
             </div>
           ))}
         </div>
@@ -335,26 +335,19 @@ export default function HistoryPage() {
               key={expense.id}
               className="border-t border-gray-100 py-2"
             >
-              <div className="flex items-start justify-between">
+              <div className="flex items-start justify-between gap-3">
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-gray-900">
-                      {expense.category === "Other" && expense.custom_category
-                        ? expense.custom_category
-                        : expense.category}
-                    </span>
-                    <span className="text-xs text-gray-400">
-                      {formatDate(expense.date)}
-                    </span>
-                  </div>
-                  {expense.note && (
-                    <p className="text-sm text-gray-500 mt-0.5 truncate">
-                      {expense.note}
-                    </p>
-                  )}
+                  <p className="text-sm font-normal text-gray-900 truncate">
+                    {expense.category === "Other" && expense.custom_category
+                      ? expense.custom_category
+                      : expense.category}
+                  </p>
+                  <p className="text-xs font-normal text-gray-400 truncate">
+                    {formatDate(expense.date)}{expense.note ? ` · ${expense.note}` : ""}
+                  </p>
                 </div>
-                <div className="flex items-center gap-3 ml-3">
-                  <span className="text-base font-semibold text-gray-900">
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="text-sm font-normal text-gray-900">
                     {formatCurrency(expense.amount)}
                   </span>
                   <div className="flex gap-1">
