@@ -114,6 +114,7 @@ export default function DashboardPage() {
   const [selectedMonth, setSelectedMonth] = useState(0);
   const [incomeRecords, setIncomeRecords] = useState<IncomeRecord[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [incomeDetailsOpen, setIncomeDetailsOpen] = useState(false);
   const [incomeFormOpen, setIncomeFormOpen] = useState(false);
   const [editingIncomeId, setEditingIncomeId] = useState<string | null>(null);
   const [incomeForm, setIncomeForm] = useState({ source: "", amount: "", date: todayAsInputDate(), note: "" });
@@ -350,29 +351,50 @@ export default function DashboardPage() {
         {/* Income */}
         <div className="bg-white border border-gray-200 rounded-xl p-4">
           <div className="flex items-start justify-between gap-3">
-            <div>
+            <button
+              type="button"
+              onClick={() => setIncomeDetailsOpen((open) => !open)}
+              className="text-left"
+              aria-expanded={incomeDetailsOpen}
+            >
               <p className="text-xs text-gray-500 uppercase tracking-wide">Total Income</p>
-              <p className="text-2xl font-semibold text-gray-900 mt-1">{incomeAmount > 0 ? formatCurrency(incomeAmount) : "—"}</p>
-            </div>
+              <span className="flex items-center gap-2 mt-1">
+                <span className="text-2xl font-semibold text-gray-900">{incomeAmount > 0 ? formatCurrency(incomeAmount) : "—"}</span>
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  className={`text-gray-400 transition-transform ${incomeDetailsOpen ? "rotate-180" : ""}`}
+                  aria-hidden="true"
+                >
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+              </span>
+            </button>
             <button onClick={openAddIncome} className="text-sm text-gray-900 font-medium border border-gray-300 rounded-lg px-3 py-1.5">Add Income</button>
           </div>
           {incomeError && !incomeFormOpen && <p className="text-red-500 text-xs mt-2">{incomeError}</p>}
-          <div className="mt-3 divide-y divide-gray-100">
-            {incomeRecords.map((record) => (
-              <div key={record.id} className="py-2.5 flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-gray-800 truncate">{record.source}</p>
-                  <p className="text-xs text-gray-400">{formatDate(record.date)}{record.note ? ` · ${record.note}` : ""}</p>
+          {incomeDetailsOpen && (
+            <div className="mt-3 divide-y divide-gray-100">
+              {incomeRecords.map((record) => (
+                <div key={record.id} className="py-2.5 flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-gray-800 truncate">{record.source}</p>
+                    <p className="text-xs text-gray-400">{formatDate(record.date)}{record.note ? ` · ${record.note}` : ""}</p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-sm font-medium text-gray-900">{formatCurrency(record.amount)}</span>
+                    <button onClick={() => openEditIncome(record)} className="text-xs text-gray-500 underline">Edit</button>
+                    <button onClick={() => deleteIncome(record)} className="text-xs text-gray-400 hover:text-red-500">Delete</button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <span className="text-sm font-medium text-gray-900">{formatCurrency(record.amount)}</span>
-                  <button onClick={() => openEditIncome(record)} className="text-xs text-gray-500 underline">Edit</button>
-                  <button onClick={() => deleteIncome(record)} className="text-xs text-gray-400 hover:text-red-500">Delete</button>
-                </div>
-              </div>
-            ))}
-            {incomeRecords.length === 0 && <p className="text-sm text-gray-400 py-2">No income records this month.</p>}
-          </div>
+              ))}
+              {incomeRecords.length === 0 && <p className="text-sm text-gray-400 py-2">No income records this month.</p>}
+            </div>
+          )}
         </div>
 
         {incomeFormOpen && (
