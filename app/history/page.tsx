@@ -225,6 +225,15 @@ export default function HistoryPage() {
           ))}
         </div>
 
+        <div className="bg-white border border-gray-200 rounded-xl p-4">
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-gray-500 uppercase tracking-wide">Expenses</p>
+            <p className="text-sm font-semibold text-gray-900">
+              {formatCurrency(expenses.reduce((sum, expense) => sum + Number(expense.amount), 0))}
+            </p>
+          </div>
+        </div>
+
         {expenses.length === 0 && (
           <p className="text-center text-gray-400 text-sm py-8">
             No expenses for {formatMonthYear(selectedYear, selectedMonth)}.
