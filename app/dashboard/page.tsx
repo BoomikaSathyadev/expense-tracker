@@ -3,6 +3,10 @@
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase";
+import { fetchAllPages } from "@/lib/lending";
+import {
+  FINANCIAL_RECORDS_CHANGED_EVENT,
+} from "@/lib/financial-events";
 import BottomNav from "@/components/BottomNav";
 import { Expense, IncomeRecord } from "@/lib/types";
 import {
@@ -121,6 +125,9 @@ export default function DashboardPage() {
   const [incomeError, setIncomeError] = useState("");
   const [savingIncome, setSavingIncome] = useState(false);
   const [cumulativeSavings, setCumulativeSavings] = useState(0);
+  const [totalLentOutstanding, setTotalLentOutstanding] = useState(0);
+  const [totalBorrowedOutstanding, setTotalBorrowedOutstanding] = useState(0);
+  const [lendingSummaryError, setLendingSummaryError] = useState("");
   const [availableMonths, setAvailableMonths] = useState<
     { year: number; month: number }[]
   >([]);
@@ -136,7 +143,14 @@ export default function DashboardPage() {
         return;
       }
 
-      const [incomeRes, expensesRes, allIncomeRes, allExpensesRes] =
+      const [
+        incomeRes,
+        expensesRes,
+        allIncomeRes,
+        allExpensesRes,
+        lendingRes,
+        repaymentsRes,
+      ] =
         await Promise.all([
           supabase
             .from("income_records")
@@ -165,10 +179,58 @@ export default function DashboardPage() {
             .from("expenses")
             .select("date, amount")
             .eq("user_id", user.id),
+          fetchAllPages((from, to) =>
+            supabase
+              .from("lending_transactions")
+              .select("id, type, amount")
+              .eq("user_id", user.id)
+              .range(from, to)
+          ),
+          fetchAllPages((from, to) =>
+            supabase
+              .from("lending_repayments")
+              .select("transaction_id, amount")
+              .eq("user_id", user.id)
+              .range(from, to)
+          ),
         ]);
 
       setIncomeRecords(incomeRes.data || []);
       setExpenses(expensesRes.data || []);
+      if (lendingRes.error || repaymentsRes.error) {
+        setLendingSummaryError(
+          lendingRes.error?.message ||
+            repaymentsRes.error?.message ||
+            "Unable to load lending totals."
+        );
+      } else {
+        setLendingSummaryError("");
+        const repaidByTransaction = new Map<string, number>();
+        (repaymentsRes.data || []).forEach(
+          (repayment: { transaction_id: string; amount: number }) => {
+            repaidByTransaction.set(
+              repayment.transaction_id,
+              (repaidByTransaction.get(repayment.transaction_id) || 0) +
+                Math.round(Number(repayment.amount) * 100)
+            );
+          }
+        );
+        let lentCents = 0;
+        let borrowedCents = 0;
+        (lendingRes.data || []).forEach(
+          (transaction: { id: string; type: string; amount: number }) => {
+            const outstanding = Math.max(
+              0,
+              Math.round(Number(transaction.amount) * 100) -
+                (repaidByTransaction.get(transaction.id) || 0)
+            );
+            if (transaction.type === "lent") lentCents += outstanding;
+            if (transaction.type === "borrowed") borrowedCents += outstanding;
+          }
+        );
+        setTotalLentOutstanding(lentCents / 100);
+        setTotalBorrowedOutstanding(borrowedCents / 100);
+      }
 
       // Build available months from income + expenses
       const monthSet = new Set<string>();
@@ -227,6 +289,21 @@ export default function DashboardPage() {
     setSelectedMonth(month);
     fetchData(year, month);
   }, [fetchData]);
+
+  useEffect(() => {
+    const handleFinancialRecordsChanged = () => {
+      void fetchData(selectedYear, selectedMonth);
+    };
+    window.addEventListener(
+      FINANCIAL_RECORDS_CHANGED_EVENT,
+      handleFinancialRecordsChanged
+    );
+    return () =>
+      window.removeEventListener(
+        FINANCIAL_RECORDS_CHANGED_EVENT,
+        handleFinancialRecordsChanged
+      );
+  }, [fetchData, selectedMonth, selectedYear]);
 
   function handleMonthChange(e: React.ChangeEvent<HTMLSelectElement>) {
     const [y, m] = e.target.value.split("-").map(Number);
@@ -303,6 +380,8 @@ export default function DashboardPage() {
   const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0);
   const incomeAmount = incomeRecords.reduce((sum, record) => sum + Number(record.amount), 0);
   const savings = incomeAmount - totalExpenses;
+  const availableBalance =
+    savings - totalLentOutstanding + totalBorrowedOutstanding;
 
   const categoryBreakdown: Record<string, number> = {};
   expenses.forEach((e) => {
@@ -348,6 +427,11 @@ export default function DashboardPage() {
 
       {/* Summary Cards */}
       <div className="px-4 space-y-3">
+        {lendingSummaryError && (
+          <p role="alert" className="text-sm text-red-600 bg-red-50 rounded-lg p-3">
+            Unable to load Lend & Borrow totals: {lendingSummaryError}
+          </p>
+        )}
         {/* Income */}
         <div className="bg-white border border-gray-200 rounded-xl p-4">
           <div className="flex items-start justify-between gap-3">
@@ -440,6 +524,39 @@ export default function DashboardPage() {
               {formatCurrency(savings)}
             </p>
           </div>
+        </div>
+
+        {/* Outstanding lending and borrowing are separate from income and expenses. */}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="bg-white border border-gray-200 rounded-xl p-4">
+            <p className="text-xs text-gray-500 uppercase tracking-wide">
+              Total Lent
+            </p>
+            <p className="text-xl font-semibold text-gray-900 mt-1">
+              {lendingSummaryError ? "—" : formatCurrency(totalLentOutstanding)}
+            </p>
+          </div>
+          <div className="bg-white border border-gray-200 rounded-xl p-4">
+            <p className="text-xs text-gray-500 uppercase tracking-wide">
+              Total Borrowed
+            </p>
+            <p className="text-xl font-semibold text-gray-900 mt-1">
+              {lendingSummaryError ? "—" : formatCurrency(totalBorrowedOutstanding)}
+            </p>
+          </div>
+        </div>
+
+        <div className="bg-white border border-gray-200 rounded-xl p-4">
+          <p className="text-xs text-gray-500 uppercase tracking-wide">
+            Available Balance
+          </p>
+          <p
+            className={`text-2xl font-semibold mt-1 ${
+              availableBalance >= 0 ? "text-gray-900" : "text-red-600"
+            }`}
+          >
+            {lendingSummaryError ? "—" : formatCurrency(availableBalance)}
+          </p>
         </div>
 
         {/* Cumulative savings */}

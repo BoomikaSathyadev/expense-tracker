@@ -33,14 +33,24 @@ export async function proxy(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
 
-  const protectedRoutes = ["/dashboard", "/add", "/history", "/settings"];
+  const protectedRoutes = [
+    "/dashboard",
+    "/add",
+    "/history",
+    "/lend-borrow",
+    "/settings",
+  ];
   const isProtected = protectedRoutes.some((r) => pathname.startsWith(r));
 
   if (!user && isProtected) {
     return NextResponse.redirect(new URL("/auth", request.url));
   }
 
-  if (user && pathname === "/auth") {
+  if (
+    user &&
+    pathname === "/auth" &&
+    request.nextUrl.searchParams.get("password-reset") !== "1"
+  ) {
     return NextResponse.redirect(new URL("/dashboard", request.url));
   }
 

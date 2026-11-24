@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase";
 
@@ -85,6 +86,17 @@ export default function AuthPage() {
             placeholder="••••••••"
           />
         </div>
+
+        {mode === "login" && (
+          <div className="-mt-2 text-right">
+            <Link
+              href="/forgot-password"
+              className="text-sm text-gray-700 underline"
+            >
+              Forgot password?
+            </Link>
+          </div>
+        )}
 
         {error && <p className="text-red-600 text-sm">{error}</p>}
         {message && <p className="text-green-700 text-sm">{message}</p>}

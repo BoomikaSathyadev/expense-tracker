@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase";
+import { notifyFinancialRecordsChanged } from "@/lib/financial-events";
 import BottomNav from "@/components/BottomNav";
 import { CATEGORIES, Category } from "@/lib/types";
 import { getTodayString } from "@/lib/utils";
@@ -65,6 +66,7 @@ export default function AddExpensePage() {
       return;
     }
 
+    notifyFinancialRecordsChanged();
     router.push("/dashboard");
   }
 

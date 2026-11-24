@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase";
+import { notifyFinancialRecordsChanged } from "@/lib/financial-events";
 import BottomNav from "@/components/BottomNav";
 import { Expense, IncomeRecord, CATEGORIES, Category } from "@/lib/types";
 import {
@@ -167,6 +168,7 @@ export default function HistoryPage() {
 
     setEditingId(null);
     setSaving(false);
+    notifyFinancialRecordsChanged();
     fetchExpenses(selectedYear, selectedMonth);
   }
 
@@ -176,6 +178,7 @@ export default function HistoryPage() {
     const supabase = createClient();
     await supabase.from("expenses").delete().eq("id", id);
     setDeletingId(null);
+    notifyFinancialRecordsChanged();
     fetchExpenses(selectedYear, selectedMonth);
   }
 

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase";
+import { notifyFinancialRecordsChanged } from "@/lib/financial-events";
 import BottomNav from "@/components/BottomNav";
 import type { User } from "@supabase/supabase-js";
 
@@ -33,7 +34,7 @@ export default function SettingsPage() {
   async function handleClearData() {
     if (
       !confirm(
-        "This will permanently delete ALL your expenses and income records. This cannot be undone. Continue?"
+        "This will permanently delete ALL your expenses, income, lending transactions and repayment records. This cannot be undone. Continue?"
       )
     )
       return;
@@ -43,15 +44,29 @@ export default function SettingsPage() {
     const {
       data: { user },
     } = await supabase.auth.getUser();
-    if (!user) return;
+    if (!user) {
+      setClearing(false);
+      router.replace("/auth");
+      return;
+    }
 
-    await Promise.all([
+    const results = await Promise.all([
       supabase.from("expenses").delete().eq("user_id", user.id),
       supabase.from("income_records").delete().eq("user_id", user.id),
       supabase.from("monthly_income").delete().eq("user_id", user.id),
+      supabase.from("lending_transactions").delete().eq("user_id", user.id),
+      supabase.from("lending_repayments").delete().eq("user_id", user.id),
     ]);
 
+    const failure = results.find((result) => result.error)?.error;
+    if (failure) {
+      setClearing(false);
+      alert(`Could not clear all data: ${failure.message}`);
+      return;
+    }
+
     setClearing(false);
+    notifyFinancialRecordsChanged();
     alert("All data cleared.");
     router.replace("/dashboard");
   }
@@ -102,7 +117,7 @@ export default function SettingsPage() {
             Danger Zone
           </p>
           <p className="text-sm text-gray-600 mb-3">
-            Permanently delete all your expenses and income records.
+            Permanently delete all your expenses, income, lending transactions and repayment records.
           </p>
           <button
             onClick={handleClearData}

@@ -60,6 +60,24 @@ const tabs = [
     ),
   },
   {
+    href: "/lend-borrow",
+    label: "Lend & Borrow",
+    icon: (active: boolean) => (
+      <svg
+        width="22"
+        height="22"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+      >
+        <rect x="3" y="6" width="18" height="12" rx="2" />
+        <circle cx="12" cy="12" r="2.5" fill={active ? "currentColor" : "none"} />
+        <path d="M7 10h.01M17 14h.01" strokeLinecap="round" />
+      </svg>
+    ),
+  },
+  {
     href: "/settings",
     label: "Settings",
     icon: (active: boolean) => (
@@ -85,17 +103,19 @@ export default function BottomNav() {
     <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-50">
       <div className="max-w-lg mx-auto flex">
         {tabs.map((tab) => {
-          const active = pathname === tab.href;
+          const active = pathname === tab.href || pathname.startsWith(`${tab.href}/`);
           return (
             <Link
               key={tab.href}
               href={tab.href}
-              className={`flex-1 flex flex-col items-center py-3 gap-1 text-xs font-medium transition-colors ${
+              className={`min-w-0 flex-1 flex flex-col items-center py-3 gap-1 ${
+                tab.href === "/lend-borrow" ? "text-[9px] sm:text-xs" : "text-[10px] sm:text-xs"
+              } font-medium transition-colors ${
                 active ? "text-gray-900" : "text-gray-400"
               }`}
             >
-              {tab.icon(active)}
-              {tab.label}
+              <span className="shrink-0">{tab.icon(active)}</span>
+              <span className="whitespace-nowrap">{tab.label}</span>
             </Link>
           );
         })}

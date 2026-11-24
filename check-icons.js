@@ -1,0 +1,12 @@
+const fs = require('fs');
+const buf192 = fs.readFileSync('public/icon-192.png');
+const buf512 = fs.readFileSync('public/icon-512.png');
+const sig = [137,80,78,71,13,10,26,10];
+const ok192 = sig.every((b,i) => buf192[i]===b);
+const ok512 = sig.every((b,i) => buf512[i]===b);
+console.log('icon-192 valid PNG:', ok192, '| size:', buf192.length, 'bytes');
+console.log('icon-512 valid PNG:', ok512, '| size:', buf512.length, 'bytes');
+const w192 = buf192.readUInt32BE(16), h192 = buf192.readUInt32BE(20);
+const w512 = buf512.readUInt32BE(16), h512 = buf512.readUInt32BE(20);
+console.log('icon-192 dimensions:', w192, 'x', h192);
+console.log('icon-512 dimensions:', w512, 'x', h512);
